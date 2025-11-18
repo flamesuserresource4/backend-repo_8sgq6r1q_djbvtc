@@ -1,48 +1,78 @@
 """
-Database Schemas
+Database Schemas for Nutri Guide
 
-Define your MongoDB collection schemas here using Pydantic models.
-These schemas are used for data validation in your application.
-
-Each Pydantic model represents a collection in your database.
-Model name is converted to lowercase for the collection name:
-- User -> "user" collection
-- Product -> "product" collection
-- BlogPost -> "blogs" collection
+Each Pydantic model corresponds to a MongoDB collection (lowercased class name).
+- UserProfile -> "userprofile"
+- FoodItem -> "fooditem"
+- DailyLog -> "dailylog"
+- MealEntry -> embedded within DailyLog.entries
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List, Literal
 
-# Example schemas (replace with your own):
 
-class User(BaseModel):
+class UserProfile(BaseModel):
     """
-    Users collection schema
-    Collection name: "user" (lowercase of class name)
+    User profile and goal settings
+    Collection: userprofile
     """
-    name: str = Field(..., description="Full name")
-    email: str = Field(..., description="Email address")
-    address: str = Field(..., description="Address")
-    age: Optional[int] = Field(None, ge=0, le=120, description="Age in years")
-    is_active: bool = Field(True, description="Whether user is active")
+    email: str = Field(..., description="Unique email identifier")
+    name: Optional[str] = Field(None, description="Full name")
+    age: int = Field(..., ge=10, le=120, description="Age in years")
+    gender: Literal["male", "female"] = Field(..., description="Biological sex for BMR calc")
+    height_cm: float = Field(..., gt=0, description="Height in centimeters")
+    weight_kg: float = Field(..., gt=0, description="Current weight in kilograms")
+    activity_level: Literal[
+        "sedentary", "light", "moderate", "active", "very_active"
+    ] = Field(..., description="Activity multiplier for TDEE")
+    goal: Literal["lose", "maintain", "gain"] = Field(
+        "maintain", description="Calorie goal direction"
+    )
 
-class Product(BaseModel):
+
+class FoodItem(BaseModel):
     """
-    Products collection schema
-    Collection name: "product" (lowercase of class name)
+    Food catalog item (per 100g or per serving)
+    Collection: fooditem
     """
-    title: str = Field(..., description="Product title")
-    description: Optional[str] = Field(None, description="Product description")
-    price: float = Field(..., ge=0, description="Price in dollars")
-    category: str = Field(..., description="Product category")
-    in_stock: bool = Field(True, description="Whether product is in stock")
+    name: str = Field(..., description="Food name")
+    calories: float = Field(..., ge=0, description="kcal per serving")
+    protein: float = Field(0, ge=0, description="grams per serving")
+    carbs: float = Field(0, ge=0, description="grams per serving")
+    fat: float = Field(0, ge=0, description="grams per serving")
+    serving: str = Field("1 serving", description="Serving description, e.g., 100g or 1 cup")
+    source: Optional[str] = Field(None, description="origin: built-in or user")
+    created_by: Optional[str] = Field(None, description="email of creator if custom")
 
-# Add your own schemas here:
-# --------------------------------------------------
 
-# Note: The Flames database viewer will automatically:
-# 1. Read these schemas from GET /schema endpoint
-# 2. Use them for document validation when creating/editing
-# 3. Handle all database operations (CRUD) directly
-# 4. You don't need to create any database endpoints!
+class MealEntry(BaseModel):
+    """
+    Single meal entry embedded in a daily log
+    """
+    food_id: Optional[str] = Field(None, description="Referenced FoodItem _id as string")
+    name: str = Field(..., description="Food name at time of logging")
+    calories: float = Field(..., ge=0)
+    protein: float = Field(0, ge=0)
+    carbs: float = Field(0, ge=0)
+    fat: float = Field(0, ge=0)
+    quantity: float = Field(1, gt=0, description="Multiplier of serving")
+    meal_type: Literal["breakfast", "lunch", "dinner", "snack"] = "breakfast"
+
+
+class DailyTotals(BaseModel):
+    calories: float = 0
+    protein: float = 0
+    carbs: float = 0
+    fat: float = 0
+
+
+class DailyLog(BaseModel):
+    """
+    Daily log of meals for a user and date
+    Collection: dailylog
+    """
+    email: str = Field(..., description="User email")
+    date: str = Field(..., description="YYYY-MM-DD")
+    entries: List[MealEntry] = []
+    totals: DailyTotals = DailyTotals()
